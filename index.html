@@ -83,15 +83,13 @@ p{margin:9px 0}
 ul{margin:9px 0;padding-left:20px}li{margin:5px 0;font-size:13.5px;color:var(--ink-2)}
 li b{color:var(--ink)}
 
-/* tooltip */
-[data-tip]{position:relative;cursor:help;border-bottom:1px dotted var(--rose)}
-[data-tip]::after{content:attr(data-tip);position:absolute;left:50%;top:calc(100% + 9px);
- transform:translateX(-50%);width:min(300px,80vw);background:var(--plum-deep);color:#fff;
- font-family:var(--font-body);font-weight:400;font-size:11.5px;line-height:1.5;text-align:left;
- padding:10px 12px;border-radius:var(--r-md);box-shadow:var(--shadow-pop);display:none;
- z-index:60;white-space:normal;letter-spacing:0}
-[data-tip]:hover::after,[data-tip]:focus::after{display:block}
+/* tooltip - gövdeye bağlı, kaydırma kapsayıcısı tarafından kırpılmaz */
+[data-tip]{cursor:help;border-bottom:1px dotted var(--rose)}
 th [data-tip]{border-bottom-color:rgba(255,255,255,.45)}
+#tipbox{position:fixed;display:none;max-width:min(380px,86vw);background:var(--plum-deep);color:#fff;
+ font-family:var(--font-body);font-weight:400;font-size:11.5px;line-height:1.65;text-align:left;
+ padding:10px 12px;border-radius:var(--r-md);box-shadow:var(--shadow-pop);z-index:9999;
+ white-space:normal;letter-spacing:0;pointer-events:none}
 
 /* tablo */
 .tscroll{overflow-x:auto;background:var(--surface);border:1px solid var(--line);
@@ -165,7 +163,13 @@ input.q:focus,select.sel:focus{outline:2px solid var(--rose-tint);border-color:v
 
 /* stacked bar hücresi */
 .sbar{display:flex;height:9px;border-radius:3px;overflow:hidden;min-width:110px;background:var(--line-soft)}
-.sbar i{display:block;height:100%}
+.sbar i{display:block;height:100%;transition:opacity .15s var(--ease)}
+.sbar[data-tip]{border-bottom:none;cursor:help}
+.sbar[data-tip]::after{display:none}
+.sbar:hover i,.sbar:focus i{opacity:.45}
+.sbar i:hover{opacity:1}
+.sbar:focus{outline:2px solid var(--coral-tint);outline-offset:2px}
+.sbar[data-tip]::after{width:min(360px,86vw);line-height:1.65}
 .mini{font-size:10.5px;color:var(--ink-3);margin-top:3px;letter-spacing:.01em}
 
 /* aile gezgini */
@@ -378,9 +382,12 @@ function lineChart(host, labels, series, opt){
 
 /* ---------- yatay yığılmış bar ---------- */
 function stackRow(br, total, colors){
-  let s = '<div class="sbar">';
-  for (const k in br){ const v = br[k]; if (!v) continue;
-    s += `<i style="width:${(100*v/total).toFixed(2)}%;background:${colors[k]||'#ccc'}" title="${esc(k)}: ${fmt(v)}"></i>`; }
+  const ent = Object.entries(br).filter(x => x[1]).sort((a,b) => b[1]-a[1]);
+  const tip = ent.map(([k,v]) => `${k} ${pct(v,total)} (${fmt(v)})`).join('  \u00B7  ');
+  let s = `<div class="sbar" data-tip="${esc(tip)}" tabindex="0" role="img" aria-label="${esc(tip)}">`;
+  for (const [k,v] of ent){
+    s += `<i style="width:${(100*v/total).toFixed(2)}%;background:${colors[k]||'#ccc'}"></i>`;
+  }
   return s+'</div>';
 }
 function legend(host, items, colors){
@@ -576,5 +583,38 @@ function boot(){
   }), {rootMargin:'-15% 0px -75% 0px'});
   document.querySelectorAll('section[id]').forEach(s => obs.observe(s));
 }
+
+/* ---------- tooltip ---------- */
+(function(){
+  const box = document.createElement('div');
+  box.id = 'tipbox'; box.setAttribute('role','tooltip');
+  document.body.appendChild(box);
+  let cur = null;
+  function place(el){
+    const t = el.getAttribute('data-tip'); if (!t) return;
+    box.textContent = t; box.style.display = 'block';
+    const r = el.getBoundingClientRect(), bw = box.offsetWidth, bh = box.offsetHeight;
+    let x = r.left + r.width/2 - bw/2;
+    x = Math.max(8, Math.min(x, innerWidth - bw - 8));
+    let y = r.bottom + 9;
+    if (y + bh > innerHeight - 8) y = Math.max(8, r.top - bh - 9);
+    box.style.left = Math.round(x)+'px'; box.style.top = Math.round(y)+'px';
+    cur = el;
+  }
+  function hide(){ box.style.display = 'none'; cur = null; }
+  document.addEventListener('mouseover', e => {
+    const el = e.target.closest && e.target.closest('[data-tip]');
+    if (el) place(el); else if (cur) hide();
+  });
+  document.addEventListener('focusin', e => {
+    const el = e.target.closest && e.target.closest('[data-tip]');
+    if (el) place(el);
+  });
+  document.addEventListener('focusout', hide);
+  addEventListener('scroll', () => { if (cur) place(cur); }, true);
+  addEventListener('resize', hide);
+  addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
+})();
+
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 </script>
